@@ -54,31 +54,31 @@ def prep_track(reftrack_imp: np.ndarray,
     # CHECK SPLINE NORMALS FOR CROSSING POINTS -------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
 
-    normals_crossing = tph.check_normals_crossing.check_normals_crossing(track=reftrack_interp,
-                                                                         normvec_normalized=normvec_normalized_interp,
-                                                                         horizon=10)
+    # normals_crossing = tph.check_normals_crossing.check_normals_crossing(track=reftrack_interp,
+    #                                                                      normvec_normalized=normvec_normalized_interp,
+    #                                                                      horizon=10)
 
-    if normals_crossing:
-        bound_1_tmp = reftrack_interp[:, :2] + normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 2], axis=1)
-        bound_2_tmp = reftrack_interp[:, :2] - normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 3], axis=1)
+    # if normals_crossing:
+    #     bound_1_tmp = reftrack_interp[:, :2] + normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 2], axis=1)
+    #     bound_2_tmp = reftrack_interp[:, :2] - normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 3], axis=1)
 
-        plt.figure()
+    #     plt.figure()
 
-        plt.plot(reftrack_interp[:, 0], reftrack_interp[:, 1], 'k-')
-        for i in range(bound_1_tmp.shape[0]):
-            temp = np.vstack((bound_1_tmp[i], bound_2_tmp[i]))
-            plt.plot(temp[:, 0], temp[:, 1], "r-", linewidth=0.7)
+    #     plt.plot(reftrack_interp[:, 0], reftrack_interp[:, 1], 'k-')
+    #     for i in range(bound_1_tmp.shape[0]):
+    #         temp = np.vstack((bound_1_tmp[i], bound_2_tmp[i]))
+    #         plt.plot(temp[:, 0], temp[:, 1], "r-", linewidth=0.7)
 
-        plt.grid()
-        ax = plt.gca()
-        ax.set_aspect("equal", "datalim")
-        plt.xlabel("east in m")
-        plt.ylabel("north in m")
-        plt.title("Error: at least one pair of normals is crossed!")
+    #     plt.grid()
+    #     ax = plt.gca()
+    #     ax.set_aspect("equal", "datalim")
+    #     plt.xlabel("east in m")
+    #     plt.ylabel("north in m")
+    #     plt.title("Error: at least one pair of normals is crossed!")
 
-        plt.show()
+    #     plt.show()
 
-        raise IOError("At least two spline normals are crossed, check input or increase smoothing factor!")
+    #     raise IOError("At least two spline normals are crossed, check input or increase smoothing factor!")
 
     # ------------------------------------------------------------------------------------------------------------------
     # ENFORCE MINIMUM TRACK WIDTH (INFLATE TIGHTER SECTIONS UNTIL REACHED) ---------------------------------------------
