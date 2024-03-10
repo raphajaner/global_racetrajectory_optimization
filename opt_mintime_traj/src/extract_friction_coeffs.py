@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import trajectory_planning_helpers as tph
-import opt_mintime_traj
+from global_racetrajectory_optimization import opt_mintime_traj
 
 
 def extract_friction_coeffs(reftrack: np.ndarray,

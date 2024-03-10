@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 import os.path
 import json
-import frictionmap
+from global_racetrajectory_optimization import frictionmap
 
 """
 Created by:

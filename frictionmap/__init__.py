@@ -1,1 +1,1 @@
-import frictionmap.src
+from . import src

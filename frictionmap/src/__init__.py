@@ -1,3 +1,3 @@
-import frictionmap.src.reftrack_functions
-import frictionmap.src.plot_frictionmap_data
-import frictionmap.src.plot_frictionmap_grid
+from . import reftrack_functions
+from . import plot_frictionmap_data
+from . import plot_frictionmap_grid

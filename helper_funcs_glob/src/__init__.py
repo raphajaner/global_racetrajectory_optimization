@@ -1,8 +1,8 @@
-import helper_funcs_glob.src.interp_track
-import helper_funcs_glob.src.calc_min_bound_dists
-import helper_funcs_glob.src.check_traj
-import helper_funcs_glob.src.export_traj_race
-import helper_funcs_glob.src.export_traj_ltpl
-import helper_funcs_glob.src.import_track
-import helper_funcs_glob.src.result_plots
-import helper_funcs_glob.src.prep_track
+from . import interp_track
+from . import calc_min_bound_dists
+from . import check_traj
+from . import export_traj_race
+from . import export_traj_ltpl
+from . import import_track
+from . import result_plots
+from . import prep_track

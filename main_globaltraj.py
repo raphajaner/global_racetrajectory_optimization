@@ -1,4 +1,4 @@
-import opt_mintime_traj
+from global_racetrajectory_optimization import opt_mintime_traj, helper_funcs_glob
 import numpy as np
 import time
 import json
@@ -8,7 +8,6 @@ import copy
 import matplotlib.pyplot as plt
 import configparser
 import pkg_resources
-import helper_funcs_glob
 
 """
 Created by:

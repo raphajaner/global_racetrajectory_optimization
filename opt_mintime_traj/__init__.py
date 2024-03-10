@@ -1,2 +1,2 @@
-import opt_mintime_traj.src
-import opt_mintime_traj.powertrain_src
+from . import src
+from . import powertrain_src

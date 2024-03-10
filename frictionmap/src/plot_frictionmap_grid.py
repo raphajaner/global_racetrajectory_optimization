@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import cKDTree
 import os.path
-import frictionmap
+from global_racetrajectory_optimization import frictionmap
 
 """
 Created by:

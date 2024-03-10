@@ -6,7 +6,7 @@ from datetime import datetime
 import os.path
 import matplotlib.path as mplPath
 from scipy.spatial import cKDTree
-import frictionmap
+from global_racetrajectory_optimization import frictionmap
 
 """
 Created by:
