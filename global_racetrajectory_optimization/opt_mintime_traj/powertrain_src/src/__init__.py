@@ -1,0 +1,4 @@
+from global_racetrajectory_optimization.opt_mintime_traj.powertrain_src.src import Battery
+from global_racetrajectory_optimization.opt_mintime_traj.powertrain_src.src import EMachine
+from global_racetrajectory_optimization.opt_mintime_traj.powertrain_src.src import Inverter
+from global_racetrajectory_optimization.opt_mintime_traj.powertrain_src.src import Radiators
