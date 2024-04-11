@@ -262,10 +262,14 @@ def trajectory_optimizer(input_path: str,
                                                   plot_debug=False)[0]
 
     elif curv_opt_type == 'mincurv_iqp':
-        alpha_opt, reftrack_interp, normvec_normalized_interp = tph.iqp_handler.\
+        alpha_opt, reftrack_interp, normvec_normalized_interp, _, _, _, _ = tph.iqp_handler.\
             iqp_handler(reftrack=reftrack_interp,
                         normvectors=normvec_normalized_interp,
                         A=a_interp,
+                        spline_len=np.zeros(reftrack_interp.shape),
+                        psi=np.zeros(reftrack_interp.shape),
+                        kappa=np.zeros(reftrack_interp.shape),
+                        dkappa=np.zeros(reftrack_interp.shape),
                         kappa_bound=pars["veh_params"]["curvlim"],
                         w_veh=safety_width,
                         print_debug=debug,
