@@ -4,7 +4,7 @@ import trajectory_planning_helpers as tph
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LinearRegression
-from global_racetrajectory_optimization import opt_mintime_traj
+import opt_mintime_traj
 
 
 def approx_friction_map(reftrack: np.ndarray,

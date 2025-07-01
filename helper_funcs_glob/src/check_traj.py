@@ -1,5 +1,5 @@
 import numpy as np
-from global_racetrajectory_optimization import helper_funcs_glob
+import helper_funcs_glob
 
 
 def check_traj(reftrack: np.ndarray,
