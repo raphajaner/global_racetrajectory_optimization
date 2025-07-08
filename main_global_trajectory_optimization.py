@@ -1,21 +1,21 @@
-import os
 import sys
 from argparse import Namespace
 
-import cv2
-import yaml
 import subprocess
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import Tuple, Callable
-from matplotlib.widgets import Button
-from pathlib import Path
 
 from skimage.morphology import skeletonize
-# from tf_transformations import euler_from_quaternion
+import sys
+from pathlib import Path
+import yaml
+import os
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.widgets import Button
 
 import trajectory_planning_helpers as tph
-# from .readwrite_global_waypoints import write_global_waypoints
 import helper_funcs_glob
 from trajectory_optimizer import trajectory_optimizer
 
@@ -25,7 +25,7 @@ from global_planner_utils import extract_centerline, \
     dist_to_bounds, \
     add_dist_to_cent, \
     write_centerline, \
-    compare_direction
+    compare_direction, prune_skeleton_branches
 
 
 class GlobalPlannerLogic:
@@ -35,8 +35,6 @@ class GlobalPlannerLogic:
 
     def __init__(self,
                  safety_width_: float,
-                 safety_width_sp_: float,
-                 occupancy_grid_thresh_: float,
                  map_editor_mode_: bool,
                  create_map_: bool,
                  map_name_: str,
@@ -49,12 +47,11 @@ class GlobalPlannerLogic:
                  reverse_mapping_: bool = False,
                  loginfo_: Callable[[str], None] = print,
                  logwarn_: Callable[[str], None] = sys.stderr.write,
-                 logerror_: Callable[[str], None] = sys.stderr.write) -> None:
+                 logerror_: Callable[[str], None] = sys.stderr.write,
+                 ) -> None:
 
         # Parameters for processing the map from Cartographer
         self.safety_width = safety_width_
-        self.safety_width_sp = safety_width_sp_
-        self.occupancy_grid_threshold = occupancy_grid_thresh_
         self.filter_kernel_size = filter_kernel_size_
 
         # Debugging
@@ -224,7 +221,7 @@ class GlobalPlannerLogic:
 
             return wait_for_input_and_save()
 
-    def compute_global_trajectory(self, cent_length: float) -> bool:
+    def compute_global_trajectory(self, curv_opt_type, cent_length: float) -> bool:
         """
         Compute the global optimized trajectory of a map.
 
@@ -243,8 +240,18 @@ class GlobalPlannerLogic:
         img_path = os.path.join(self.map_dir, self.map_name + '.png')
         filtered_map = cv2.flip(cv2.imread(img_path, 0), 0)
 
+        smoothing_sigma = 0.
+
+        free_space = (filtered_map > 250).astype(np.uint8)
+        dist = cv2.distanceTransform(free_space, distanceType=cv2.DIST_L1, maskSize=3)
+        ridge = dist > (np.mean(dist) + smoothing_sigma * np.std(dist))
+
+        skel_bool = skeletonize(ridge.astype(np.uint8), method='lee')
+        skeleton = prune_skeleton_branches(skel_bool, max_iters=1000)
+        # pruned_img = (pruned_bool * 255).astype(np.uint8)
+
         # skeletonize
-        skeleton = skeletonize(filtered_map, method='lee')
+        # skeleton = skeletonize(filtered_map, method='lee')
 
         f, (ax0, ax1) = plt.subplots(2, 1)
         f.suptitle(f"Map [{self.map_name}]: Filtered map versus morphological skeleton")
@@ -256,7 +263,6 @@ class GlobalPlannerLogic:
         # Extract centerline from filtered occupancy grid map
         ################################################################################################################
 
-
         skeleton = skeleton.astype(np.uint8)
 
         # try:
@@ -264,23 +270,8 @@ class GlobalPlannerLogic:
             skeleton=skeleton,
             cent_length=cent_length,
             map_resolution=self.map_resolution,
-            map_editor_mode=self.map_editor_mode)
-        # except IOError:
-        #     if self.map_editor_mode:
-        #         self.logwarn('No closed contours found! Check the edited image...')
-        #     else:
-        #         self.logwarn('No closed contours found! Keep driving...')
-        #     return False
-        # except ValueError:
-        #     self.logwarn("Couldn't find a closed contour with similar length as driven path!")
-        #     self.loginfo('Maybe missed a lap completion...')
-        #     self.loginfo('Will try again in one lap, so drive at least one more lap!')
-        #     self.was_at_init_pos = True
-        #     self.initial_position = self.current_position
-        #     self.lap_count = 0
-        #     self.required_laps = 1
-        #     self.cent_driven = [self.initial_position]
-        #     return False
+            map_editor_mode=self.map_editor_mode
+        )
 
         centerline_smooth = smooth_centerline(centerline)
 
@@ -359,9 +350,10 @@ class GlobalPlannerLogic:
         # Compute global trajectory with mincurv_iqp optimization
         ################################################################################################################
         # track_path_root = os.path.join(Path.home(), ".ros")
-        track_path_root = ""
-        iqp_centerline_path = os.path.join(track_path_root, 'map_centerline')
-        sp_centerline_path = os.path.join(track_path_root, 'map_centerline_2')
+        track_dir = '../raceChamp/maps_paper/'
+        track_path_root = track_dir + self.map_name
+        # track_path_root = "./inputs/tracks/" + self.map_name
+        iqp_centerline_path = os.path.join(track_path_root, f'{self.map_name}_centerline')
 
         cent_with_dist = add_dist_to_cent(centerline_smooth=centerline_smooth,
                                           centerline_meter=centerline_meter_int,
@@ -374,7 +366,8 @@ class GlobalPlannerLogic:
                                           reverse=self.reverse_mapping)
 
         # Write centerline in a csv file and get a marker array of it
-        centerline_waypoints, centerline_markers = write_centerline(cent_with_dist)
+        centerline_waypoints, centerline_markers = write_centerline(iqp_centerline_path, cent_with_dist)
+        # saves the centerline waypoints in a csv file
 
         # Add curvature and angle to centerline waypoints
         centerline_coords = np.array([[coord.x_m, coord.y_m] for coord in centerline_waypoints.wpnts])
@@ -392,14 +385,13 @@ class GlobalPlannerLogic:
 
         self.loginfo('Start Global Trajectory optimization with iterative minimum curvature...')
 
-
         try:
             global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(
                 input_path=self.input_path,
                 track_name=iqp_centerline_path,
-                curv_opt_type='mincurv',
+                curv_opt_type=curv_opt_type,
                 safety_width=self.safety_width,
-                plot=(self.show_plots and not self.map_editor_mode)
+                plot=(self.show_plots and not self.map_editor_mode),
             )
         except RuntimeError as e:
             self.logwarn(f"Error during iterative minimum curvature optimization, error: {e}")
@@ -422,7 +414,9 @@ class GlobalPlannerLogic:
                                                  centerline=centerline_meter_int,
                                                  safety_width=self.safety_width,
                                                  show_plots=self.show_plots,
-                                                 reverse=self.reverse_mapping)
+                                                 reverse=self.reverse_mapping,
+                                                 fig_dir=track_path_root
+                                                 )
 
         # global_traj_wpnts_iqp, global_traj_markers_iqp = self.create_wpnts_markers(trajectory=global_trajectory_iqp,
         #                                                                            d_right=d_right_iqp,
@@ -432,81 +426,6 @@ class GlobalPlannerLogic:
         self.loginfo('Done with iterative minimum curvature optimization')
         self.loginfo('Lap Completed now publishing global waypoints')
 
-        ################################################################################################################
-        # Compute global trajectory with shortest path optimization
-        ################################################################################################################
-
-        if False:
-            self.loginfo('Start reverse Global Trajectory optimization with shortest path...')
-
-            self.loginfo('Start Global Trajectory optimization with iterative minimum curvature for overtaking...')
-            global_trajectory_iqp_ot, *_ = trajectory_optimizer(input_path=self.input_path,
-                                                                track_name=iqp_centerline_path,
-                                                                curv_opt_type='mincurv',
-                                                                safety_width=self.safety_width_sp,
-                                                                plot=(self.show_plots and not self.map_editor_mode))
-
-            # use new iqp path as centerline
-            new_cent_with_dist = add_dist_to_cent(centerline_smooth=global_trajectory_iqp_ot[:, 1:3],
-                                                  centerline_meter=global_trajectory_iqp_ot[:, 1:3],
-                                                  map_resolution=self.map_resolution,
-                                                  safety_width=self.safety_width_sp,
-                                                  show_plots=self.show_plots,
-                                                  dist_transform=None,
-                                                  bound_r=bound_r_water,
-                                                  bound_l=bound_l_water,
-                                                  reverse=self.reverse_mapping)
-
-            _, new_centerline_markers = write_centerline(new_cent_with_dist, sp_bool=True)
-
-            # to use iqp as new centerline, set trackname='map_centerline_2', otherwise use track_name='map_centerline'
-            # is a bit faster but cuts corner a bit more
-            global_trajectory_sp, bound_r_sp, bound_l_sp, est_t_sp = trajectory_optimizer(
-                input_path=self.input_path, track_name=sp_centerline_path, curv_opt_type='shortest_path',
-                safety_width=self.safety_width_sp, plot=(
-                        self.show_plots and not self.map_editor_mode))
-
-            self.est_lap_time = est_t_sp  # Float32()  # variable which will be published and used in l1_param_optimizer
-            # self.est_lap_time.data = est_t_sp
-
-            self.map_info_str += f'SP estimated lap time: {round(est_t_sp, 4)}s; '
-            self.map_info_str += f'SP maximum speed: {round(np.amax(global_trajectory_sp[:, 5]), 4)}m/s; '
-
-            # do not use bounds of optimizer if the one's from the watershed algorithm are available
-            if self.watershed:
-                bound_r_sp = bound_r_water
-                bound_l_sp = bound_l_water
-
-            d_right_sp, d_left_sp = dist_to_bounds(trajectory=global_trajectory_sp,
-                                                   bound_r=bound_r_sp,
-                                                   bound_l=bound_l_sp,
-                                                   centerline=centerline_meter_int,
-                                                   safety_width=self.safety_width_sp,
-                                                   show_plots=self.show_plots,
-                                                   reverse=self.reverse_mapping)
-
-            # global_traj_wpnts_sp, global_traj_markers_sp = self.create_wpnts_markers(trajectory=global_trajectory_sp,
-            #                                                                          d_right=d_right_sp,
-            #                                                                          d_left=d_left_sp,
-            #                                                                          second_traj=True)
-
-            # publish global trajectory markers and waypoints
-            self.loginfo('Done with shortest path optimization')
-            self.loginfo('Lap Completed now publishing shortest path global waypoints')
-
-        # Save info into a JSON file
-        # write_global_waypoints(
-        #     self.map_dir,
-        #     self.map_info_str,
-        #     self.est_lap_time,
-        #     centerline_markers,
-        #     centerline_waypoints,
-        #     global_traj_markers_iqp,
-        #     global_traj_wpnts_iqp,
-        #     global_traj_markers_sp,
-        #     global_traj_wpnts_sp,
-        #     bounds_markers
-        # )
         return True
 
     def filter_map_occupancy_grid(self) -> np.ndarray:
@@ -620,109 +539,35 @@ class GlobalPlannerLogic:
         at_init_pos = (x_diff < self.x_max_diff) and (y_diff < self.y_max_diff) and (theta_diff < self.theta_max_diff)
         return at_init_pos
 
-    # def update_map(self, msg: OccupancyGrid) -> None:
-    #     """
-    #     Updates the map with the given OccupancyGrid message.
-    #
-    #     Args:
-    #         msg (OccupancyGrid): The OccupancyGrid message containing map data.
-    #
-    #     Returns:
-    #         None
-    #     """
-    #     # Data should not be overwritten if we use map maps from yaml file
-    #     if self.create_map:
-    #         self.map_width = msg.info.width  # uint32, [cells]
-    #         self.map_height = msg.info.height  # uint32, [cells]
-    #         self.map_resolution = msg.info.resolution  # float32, [m/cell]
-    #         self.map_origin = msg.info.origin.position
-    #         self.map_occupancy_grid = msg.data  # int8[]
-    #
-    #     self.map_valid = True
-
-    # def update_pose(self, msg: PoseStamped) -> None:
-    #     """
-    #     Update the current pose of the robot.
-    #
-    #     Args:
-    #         msg (PoseStamped): The pose message containing the position and orientation.
-    #
-    #     Returns:
-    #         None
-    #     """
-    #     x = msg.pose.position.x
-    #     y = msg.pose.position.y
-    #     theta = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y,
-    #                                    msg.pose.orientation.z, msg.pose.orientation.w])[2]
-    #
-    #     if not self.pose_valid:
-    #         self.pose_valid = True
-    #         self.initial_position = (x, y, theta)
-    #
-    #     self.current_position = (x, y, theta)
-    #
-    #     if self.lap_count == 0:
-    #         if self.cent_driven is None:
-    #             self.cent_driven = np.array([self.current_position])
-    #         else:
-    #             self.cent_driven = np.append(self.cent_driven, [self.current_position], axis=0)
-
-    # def create_wpnts_markers(self, trajectory: np.ndarray,
-    #                          d_right: np.ndarray,
-    #                          d_left: np.ndarray,
-    #                          second_traj: bool = False): # -> tuple[WpntArray, MarkerArray]:
-    #     """
-    #     Create and return a waypoint array and a marker array.
-    #
-    #     Args:
-    #         trajectory (np.ndarray): A trajectory with waypoints in the form [s_m, x_m, y_m, psi_rad, vx_mps, ax_mps2]
-    #         d_right (np.ndarray): Distances to the right track bounds for every waypoint in `trajectory`
-    #         d_left (np.ndarray): Distances to the left track bounds for every waypoint in `trajectory`
-    #         second_traj (bool, optional): Display second trajectory with a different color than the first.
-    #                                       Better for visualization. Defaults to False.
-    #
-    #     Returns:
-    #         tuple[WpntArray, MarkerArray]: A waypoint array and a marker array with all points of `trajectory`
-    #     """
-    #     max_vx_mps = max(trajectory[:, 5])
-    #     speed_string = "Max speed: " + str(max_vx_mps)
-    #     self.loginfo(speed_string)
-    #
-    #     return create_wpnts_markers(trajectory, d_right, d_left, second_traj)
-
 
 # run the global planner logic here if this file is run directly
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-    import yaml
-    import os
-    import cv2
-    import numpy as np
-    from matplotlib import pyplot as plt
-    from matplotlib.widgets import Button
 
     # Example usage of GlobalPlannerLogic
-    map_name_ = 'cluj_real'
+    map_name = 'basement_obstacles'  # Name of the map to be used
+    curv_opt_type = 'mincurv_iqp'  # or 'mincurv' or 'mincurv_iqp' or 'shortest_path'
+    # map_dir = 'inputs/tracks/'  # Directory where the map is stored
+    map_dir = '../raceChamp/maps_paper/'
+
+    map_dir = map_dir + f'/{map_name}'
+
 
     planner = GlobalPlannerLogic(
-        safety_width_=0.5,
-        safety_width_sp_=0.3,
-        occupancy_grid_thresh_=50,
+        safety_width_=0.8,
         map_editor_mode_=True,
         create_map_=False,
-        map_name_=map_name_,
-        map_dir_=f'inputs/tracks/{map_name_}',
-        finish_script_path_='/path/to/finish_script.sh',
-        input_path_='eth_config',
+        map_name_=map_name,
+        map_dir_=map_dir,
+        finish_script_path_=None,
+        input_path_='config',
         show_plots_=True,
         filter_kernel_size_=3,
         required_laps_=1,
-        reverse_mapping_=False
+        reverse_mapping_=False,
     )
 
-    success = planner.compute_global_trajectory(cent_length=0.0)
+    success = planner.compute_global_trajectory(curv_opt_type=curv_opt_type, cent_length=0.0)
     if success:
-        print(f"Global planning successful. Map name: {map_name_}")
+        print(f"Global planning successful. Map name: {map_name}")
     else:
         print("Global planning failed.")

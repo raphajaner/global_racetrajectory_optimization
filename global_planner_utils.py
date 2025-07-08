@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from skimage.segmentation import watershed
 # from ament_index_python.packages import get_package_share_directory
+from scipy.ndimage import convolve
 
 import trajectory_planning_helpers as tph
 import helper_funcs_glob
@@ -17,6 +18,40 @@ import helper_funcs_glob
 # from geometry_msgs.msg import Point
 # from f110_msgs.msg import Wpnt, WpntArray
 # from visualization_msgs.msg import Marker, MarkerArray
+
+
+def prune_skeleton_branches(skel: np.ndarray, max_iters: int = 1000) -> np.ndarray:
+    """
+    Given a binary skeleton image (dtype=uint8 or bool), iteratively remove
+    all endpoints (pixels with exactly one 8-connected neighbor) until no
+    endpoints remain or we hit max_iters. Returns the pruned skeleton.
+
+    Args:
+        skel (np.ndarray): 2D array of 0/1 or False/True representing the skeleton.
+        max_iters (int): Maximum number of pruning iterations.
+
+    Returns:
+        np.ndarray: A new 2D array of the same shape, where all small spurs
+                    (endpoints) have been removed, leaving only the core loop(s).
+    """
+    pruned = (skel > 0).astype(np.uint8)
+    kernel = np.array([[1, 1, 1],
+                       [1, 0, 1],
+                       [1, 1, 1]], dtype=np.uint8)
+
+    for _ in range(max_iters):
+        # Count how many neighbors each “on” pixel has
+        neighbor_count = convolve(pruned, kernel, mode='constant', cval=0)
+
+        # An endpoint is an “on” pixel with exactly one “on” neighbor
+        endpoints = (pruned == 1) & (neighbor_count == 1)
+        if not np.any(endpoints):
+            break
+
+        # Remove all endpoints
+        pruned[endpoints] = 0
+
+    return pruned
 
 
 def get_data_path(subpath=''):
@@ -304,7 +339,9 @@ def dist_to_bounds(
         centerline: np.ndarray,
         safety_width: float,
         show_plots: bool,
-        reverse: bool = False) -> tuple[np.ndarray, np.ndarray]:
+        reverse: bool = False,
+        fig_dir: str = None
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate the distance to track bounds for every point on a trajectory.
 
@@ -401,6 +438,12 @@ def dist_to_bounds(
         plt.title(f"Global trajectory with vehicle width")
         plt.legend()
 
+        if fig_dir is not None:
+            # save to folder
+            # TODO!
+            fig.savefig(fig_dir + '/track_with_optimized_path.png')
+            pass
+
         plt.show()
     # Return flipped distances if map_editor reversing
     if reverse:
@@ -456,6 +499,36 @@ def add_dist_to_cent(centerline_smooth: np.ndarray,
             width_track_right = np.interp(np.arange(0, len(centerline_meter)), np.arange(0, len(width_track_right)),
                                           width_track_right)
         width_track_left = width_track_right
+    # if dist_transform is not None:
+    #     # Compute distance to the nearest boundary for each centerline point
+    #     # To distinguish left/right, use the normal vector at each point
+    #     # and sample the distance transform in both directions
+    #     width_track_right = np.zeros(len(centerline_smooth))
+    #     width_track_left = np.zeros(len(centerline_smooth))
+    #     # Calculate tangent and normal vectors
+    #     diffs = np.roll(centerline_smooth, -1, axis=0) - np.roll(centerline_smooth, 1, axis=0)
+    #     tangents = diffs / (np.linalg.norm(diffs, axis=1, keepdims=True) + 1e-8)
+    #     normals = np.stack([-tangents[:, 1], tangents[:, 0]], axis=1)
+    #     for i, (pt, n) in enumerate(zip(centerline_smooth, normals)):
+    #         # Sample a few pixels along the normal in both directions
+    #         for sign, arr in [(-1, width_track_left), (1, width_track_right)]:
+    #             for d in range(1, 100):
+    #                 sample_pt = pt + sign * n * d
+    #                 x, y = int(round(sample_pt[0])), int(round(sample_pt[1]))
+    #                 if (0 <= y < dist_transform.shape[0]) and (0 <= x < dist_transform.shape[1]):
+    #                     if dist_transform[y, x] < 1e-3:
+    #                         arr[i] = d * map_resolution
+    #                         break
+    #             else:
+    #                 arr[i] = dist_transform[int(pt[1]), int(pt[0])] * map_resolution
+    #     # Interpolate if needed
+    #     if len(width_track_right) != len(centerline_meter):
+    #         width_track_right = np.interp(np.arange(0, len(centerline_meter)), np.arange(0, len(width_track_right)),
+    #                                       width_track_right)
+    #     if len(width_track_left) != len(centerline_meter):
+    #         width_track_left = np.interp(np.arange(0, len(centerline_meter)), np.arange(0, len(width_track_left)),
+    #                                      width_track_left)
+
     elif bound_r is not None and bound_l is not None:
         width_track_right, width_track_left = dist_to_bounds(centerline_meter, bound_r, bound_l,
                                                              centerline=centerline_meter,
@@ -472,7 +545,7 @@ def add_dist_to_cent(centerline_smooth: np.ndarray,
     return centerline_comp
 
 
-def write_centerline(centerline: np.ndarray, sp_bool: bool = False):  # -> MarkerArray:
+def write_centerline(cent_path, centerline: np.ndarray, sp_bool: bool = False):  # -> MarkerArray:
     """
     Create a csv file with centerline maps.
 
@@ -494,12 +567,18 @@ def write_centerline(centerline: np.ndarray, sp_bool: bool = False):  # -> Marke
     centerline_markers = Namespace(markers=[])  # MarkerArray()
     centerline_wpnts = Namespace(wpnts=[])  # WpntArray()
 
-    cent_str = 'map_centerline.csv' if not sp_bool else 'map_centerline_2.csv'
-
+    # cent_str = 'map_centerline.csv' if not sp_bool else 'map_centerline_2.csv'
     # cent_path = Path.home() / ".ros" / cent_str
-    cent_path = cent_str
+
+    cent_path = cent_path + '.csv'
     with open(cent_path, 'w', newline='') as file:
-        writer = csv.writer(file)
+
+        #add to blank file header
+        file.write('# \n')
+        file.write('# \n')
+        file.write('x_m;y_m;width_tr_right_m;width_tr_left_m\n')
+
+        writer = csv.writer(file, delimiter=';')
         id_cnt = 0  # for marker id
 
         for row in centerline:

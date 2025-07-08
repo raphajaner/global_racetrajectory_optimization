@@ -22,7 +22,8 @@ def trajectory_optimizer(input_path: str,
                          track_name: str,
                          curv_opt_type: str,
                          safety_width: float = 0.8,
-                         plot: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+                         plot: bool = False,
+                         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
     Optimizes a trajectory based on the given input parameters.
 
@@ -117,6 +118,10 @@ def trajectory_optimizer(input_path: str,
 
     # assemble track import path
     file_paths["track_file"] = os.path.join(file_paths["track_name"] + ".csv")
+    # remove the centerline name from the path up to the /
+    file_paths["track_dir"] = os.path.join("", *file_paths["track_name"].split("/")[:-1])
+
+    map_name = file_paths["track_dir"].split("/")[-1]
 
     # assemble friction map import paths
     file_paths["tpamap"] = os.path.join(file_paths["inputs"], "frictionmaps",
@@ -137,18 +142,21 @@ def trajectory_optimizer(input_path: str,
               " var_friction to None!")
 
     # create outputs folder(s)
-    os.makedirs(file_paths["module"] + "/outputs", exist_ok=True)
+    os.makedirs(file_paths["track_dir"], exist_ok=True)
 
     if curv_opt_type == 'mintime':
-        os.makedirs(file_paths["module"] + "/outputs/mintime", exist_ok=True)
+        os.makedirs(file_paths["track_dir"] + "/mintime", exist_ok=True)
 
     # assemble export paths
-    file_paths["traj_race_export"] = os.path.join(file_paths["module"], "outputs", "traj_race_cl.csv")
-    file_paths["traj_ltpl_export"] = os.path.join(file_paths["module"], "outputs", "traj_ltpl_cl.csv")
+    file_paths["traj_race_export"] = os.path.join(file_paths["track_dir"], f"{map_name}_raceline.csv")
+    file_paths["traj_ltpl_export"] = os.path.join(file_paths["track_dir"], f"{map_name}_raceline_ltpl.csv")
 
-    file_paths["mintime_export"] = os.path.join(file_paths["module"], "outputs", "mintime")
+    # file_paths["mintime_export"] = os.path.join(file_paths["track_dir"], "outputs", "mintime")
+    #
+    # file_paths["lap_time_mat_export"] = os.path.join(file_paths["track_dir"], "outputs", lap_time_mat_opts["file"])
 
-    file_paths["lap_time_mat_export"] = os.path.join(file_paths["module"], "outputs", lap_time_mat_opts["file"])
+    # import pdb
+    # pdb.set_trace()
 
     # ------------------------------------------------------------------------------------------------------------------
     # IMPORT VEHICLE DEPENDENT PARAMETERS ------------------------------------------------------------------------------
@@ -237,6 +245,7 @@ def trajectory_optimizer(input_path: str,
     # ------------------------------------------------------------------------------------------------------------------
     # PREPARE REFTRACK -------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
+
     reftrack_interp, normvec_normalized_interp, a_interp, coeffs_x_interp, coeffs_y_interp = \
         helper_funcs_glob.src.prep_track.prep_track(reftrack_imp=reftrack_imp,
                                                     reg_smooth_opts=pars["reg_smooth_opts"],
@@ -269,17 +278,22 @@ def trajectory_optimizer(input_path: str,
                                                   plot_debug=False)[0]
 
     elif curv_opt_type == 'mincurv_iqp':
-        alpha_opt, reftrack_interp, normvec_normalized_interp = tph.iqp_handler.iqp_handler(
+        alpha_opt, reftrack_interp, normvec_normalized_interp, _, _, _, _ = tph.iqp_handler.iqp_handler(
             reftrack=reftrack_interp,
             normvectors=normvec_normalized_interp,
             A=a_interp,
+            spline_len=None,
+            psi=None,
+            kappa=None,
+            dkappa=None,
             kappa_bound=pars["veh_params"]["curvlim"],
             w_veh=safety_width,
             print_debug=debug,
             plot_debug=plot_opts["mincurv_curv_lin"],
             stepsize_interp=pars["stepsize_opts"]["stepsize_reg"],
             iters_min=pars["optim_opts"]["iqp_iters_min"],
-            curv_error_allowed=pars["optim_opts"]["iqp_curverror_allowed"])
+            curv_error_allowed=pars["optim_opts"]["iqp_curverror_allowed"]
+        )
 
     elif curv_opt_type == 'shortest_path':
         alpha_opt = tph.opt_shortest_path.opt_shortest_path(reftrack=reftrack_interp,
@@ -410,17 +424,21 @@ def trajectory_optimizer(input_path: str,
         vx_profile_opt = np.interp(s_points_opt_interp, s_splines[:-1], v_opt)
 
     else:
-        vx_profile_opt = tph.calc_vel_profile. \
-            calc_vel_profile(ggv=ggv,
-                             ax_max_machines=ax_max_machines,
-                             v_max=pars["veh_params"]["v_max"],
-                             kappa=kappa_opt,
-                             el_lengths=el_lengths_opt_interp,
-                             closed=True,
-                             filt_window=pars["vel_calc_opts"]["vel_profile_conv_filt_window"],
-                             dyn_model_exp=pars["vel_calc_opts"]["dyn_model_exp"],
-                             drag_coeff=pars["veh_params"]["dragcoeff"],
-                             m_veh=pars["veh_params"]["mass"])
+        print(f'INFO: Using mu = {pars["veh_params"]["mu"]} for velocity profile calculation')
+
+        vx_profile_opt = tph.calc_vel_profile.calc_vel_profile(
+            ggv=ggv,
+            ax_max_machines=ax_max_machines,
+            v_max=pars["veh_params"]["v_max"],
+            kappa=kappa_opt,
+            el_lengths=el_lengths_opt_interp,
+            closed=True,
+            filt_window=pars["vel_calc_opts"]["vel_profile_conv_filt_window"],
+            dyn_model_exp=pars["vel_calc_opts"]["dyn_model_exp"],
+            drag_coeff=pars["veh_params"]["dragcoeff"],
+            m_veh=pars["veh_params"]["mass"],
+            mu=np.ones_like(s_points_opt_interp) * pars["veh_params"]["mu"],
+        )
 
     # calculate longitudinal acceleration profile
     vx_profile_opt_cl = np.append(vx_profile_opt, vx_profile_opt[0])

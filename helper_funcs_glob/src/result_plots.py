@@ -87,7 +87,7 @@ def result_plots(plot_opts: dict,
 
         # create 3d plot
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(111, projection='3d')
 
         # recast get_proj function to use scaling factors for the axes
         ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), np.diag([scale_x, scale_y, scale_z, 1.0]))
