@@ -39,7 +39,6 @@ class GlobalPlannerLogic:
                  create_map_: bool,
                  map_name_: str,
                  map_dir_: str,
-                 finish_script_path_: str,
                  input_path_: str,
                  show_plots_: bool = False,
                  filter_kernel_size_: int = 3,
@@ -117,7 +116,6 @@ class GlobalPlannerLogic:
         self.cent_driven = None
 
         # Filepaths
-        self.script_path = finish_script_path_
         '''path to script to call to finish map'''
         self.input_path = input_path_
         '''path to config files for the trajectory optimizer'''
@@ -257,7 +255,8 @@ class GlobalPlannerLogic:
         f.suptitle(f"Map [{self.map_name}]: Filtered map versus morphological skeleton")
         ax0.imshow(filtered_map, cmap='gray')
         ax1.imshow(skeleton, cmap='gray')
-        plt.show()
+        if self.show_plots:
+            plt.show()
 
         ################################################################################################################
         # Extract centerline from filtered occupancy grid map
@@ -350,10 +349,11 @@ class GlobalPlannerLogic:
         # Compute global trajectory with mincurv_iqp optimization
         ################################################################################################################
         # track_path_root = os.path.join(Path.home(), ".ros")
-        track_dir = '../raceChamp/maps_paper/'
-        track_path_root = track_dir + self.map_name
+        # track_dir =
+        #
+        # track_path_root = track_dir + self.map_name
         # track_path_root = "./inputs/tracks/" + self.map_name
-        iqp_centerline_path = os.path.join(track_path_root, f'{self.map_name}_centerline')
+        iqp_centerline_path = os.path.join(self.map_dir, f'{self.map_name}_centerline')
 
         cent_with_dist = add_dist_to_cent(centerline_smooth=centerline_smooth,
                                           centerline_meter=centerline_meter_int,
@@ -415,7 +415,7 @@ class GlobalPlannerLogic:
                                                  safety_width=self.safety_width,
                                                  show_plots=self.show_plots,
                                                  reverse=self.reverse_mapping,
-                                                 fig_dir=track_path_root
+                                                 fig_dir=self.map_dir
                                                  )
 
         # global_traj_wpnts_iqp, global_traj_markers_iqp = self.create_wpnts_markers(trajectory=global_trajectory_iqp,
@@ -543,31 +543,42 @@ class GlobalPlannerLogic:
 # run the global planner logic here if this file is run directly
 if __name__ == "__main__":
 
-    # Example usage of GlobalPlannerLogic
-    map_name = 'basement_obstacles'  # Name of the map to be used
     curv_opt_type = 'mincurv_iqp'  # or 'mincurv' or 'mincurv_iqp' or 'shortest_path'
-    # map_dir = 'inputs/tracks/'  # Directory where the map is stored
-    map_dir = '../raceChamp/maps_paper/'
 
-    map_dir = map_dir + f'/{map_name}'
+    map_dir = '../raceChamp/maps_generatedx_new_smaller/'
 
+    reverse_mapping_ = False
+    rand_toggle_directions = True
 
-    planner = GlobalPlannerLogic(
-        safety_width_=0.8,
-        map_editor_mode_=True,
-        create_map_=False,
-        map_name_=map_name,
-        map_dir_=map_dir,
-        finish_script_path_=None,
-        input_path_='config',
-        show_plots_=True,
-        filter_kernel_size_=3,
-        required_laps_=1,
-        reverse_mapping_=False,
-    )
+    map_names = []  # ['cluj', 'munich']  # ['abu_dhabi']
 
-    success = planner.compute_global_trajectory(curv_opt_type=curv_opt_type, cent_length=0.0)
-    if success:
-        print(f"Global planning successful. Map name: {map_name}")
-    else:
-        print("Global planning failed.")
+    # Find all the maps in the directory
+    if not map_names:
+        map_names = [f for f in os.listdir(map_dir) if os.path.isdir(os.path.join(map_dir, f))]
+        print(f"Available maps: {map_names}")
+
+    for i, map_name in enumerate(map_names):
+        print(f"Processing map: {map_name}")
+
+        if rand_toggle_directions and i % 2:
+            reverse_mapping_ = not reverse_mapping_
+
+        map_path = map_dir + f'{map_name}'
+
+        success = GlobalPlannerLogic(
+            safety_width_=0.6,
+            map_editor_mode_=True,
+            create_map_=False,
+            map_name_=map_name,
+            map_dir_=map_path,
+            input_path_='config',
+            show_plots_=False,
+            filter_kernel_size_=3,
+            required_laps_=2,
+            reverse_mapping_=reverse_mapping_,
+        ).compute_global_trajectory(curv_opt_type=curv_opt_type, cent_length=0.0)
+
+        if success:
+            print(f"Global planning successful for map: {map_name}")
+        else:
+            print(f"Global planning failed for map: {map_name}")
