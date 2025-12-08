@@ -545,9 +545,9 @@ if __name__ == "__main__":
 
     curv_opt_type = 'mincurv_iqp'  # or 'mincurv' or 'mincurv_iqp' or 'shortest_path'
 
-    map_dir = '../raceChamp/maps_generatedx_new_smaller/'
+    map_dir = '../raceChamp/maps_new/'
 
-    reverse_mapping_ = False
+    reverse_mapping_ = True
     rand_toggle_directions = True
 
     map_names = []  # ['cluj', 'munich']  # ['abu_dhabi']
@@ -566,7 +566,7 @@ if __name__ == "__main__":
         map_path = map_dir + f'{map_name}'
 
         success = GlobalPlannerLogic(
-            safety_width_=0.6,
+            safety_width_=0.27 + 2 * 0.27,
             map_editor_mode_=True,
             create_map_=False,
             map_name_=map_name,
@@ -574,7 +574,7 @@ if __name__ == "__main__":
             input_path_='config',
             show_plots_=False,
             filter_kernel_size_=3,
-            required_laps_=2,
+            required_laps_=4,
             reverse_mapping_=reverse_mapping_,
         ).compute_global_trajectory(curv_opt_type=curv_opt_type, cent_length=0.0)
 
