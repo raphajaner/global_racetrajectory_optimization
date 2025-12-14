@@ -394,7 +394,7 @@ class GlobalPlannerLogic:
                 plot=(self.show_plots and not self.map_editor_mode),
             )
         except RuntimeError as e:
-            self.logwarn(f"Error during iterative minimum curvature optimization, error: {e}")
+            self.loginfo(f"Error during iterative minimum curvature optimization, error: {e}")
             self.loginfo('Try again later!')
             return False
 
