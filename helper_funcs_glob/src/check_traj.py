@@ -108,7 +108,8 @@ def check_traj(reftrack: np.ndarray,
         if np.any(ax_wo_drag > np.amax(ggv[:, 1]) + 0.1):
             print("WARNING: Longitudinal ggv acceleration limit (positive) is exceeded: %.2fm/s2" % np.amax(ax_wo_drag))
 
-        if np.any(ax_wo_drag < np.amin(-ggv[:, 1]) - 0.1):
+        ax_brake_col = 3 if ggv.shape[1] == 4 else 1
+        if np.any(ax_wo_drag < np.amin(-ggv[:, ax_brake_col]) - 0.1):
             print("WARNING: Longitudinal ggv acceleration limit (negative) is exceeded: %.2fm/s2" % np.amin(ax_wo_drag))
 
         # check total acceleration

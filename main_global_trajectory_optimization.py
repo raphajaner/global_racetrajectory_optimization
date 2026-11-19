@@ -251,12 +251,13 @@ class GlobalPlannerLogic:
         # skeletonize
         # skeleton = skeletonize(filtered_map, method='lee')
 
-        f, (ax0, ax1) = plt.subplots(2, 1)
-        f.suptitle(f"Map [{self.map_name}]: Filtered map versus morphological skeleton")
-        ax0.imshow(filtered_map, cmap='gray')
-        ax1.imshow(skeleton, cmap='gray')
         if self.show_plots:
+            f, (ax0, ax1) = plt.subplots(2, 1)
+            f.suptitle(f"Map [{self.map_name}]: Filtered map versus morphological skeleton")
+            ax0.imshow(filtered_map, cmap='gray')
+            ax1.imshow(skeleton, cmap='gray')
             plt.show()
+            plt.close(f)
 
         ################################################################################################################
         # Extract centerline from filtered occupancy grid map
@@ -423,6 +424,9 @@ class GlobalPlannerLogic:
         #                                                                            d_left=d_left_iqp)
 
         # publish global trajectory markers and waypoints
+        direction = helper_funcs_glob.src.export_traj_race.get_driving_direction(global_trajectory_iqp)
+        self.map_info_str += f'Driving direction: {direction}; '
+        self.loginfo(f'Driving direction: {direction}')
         self.loginfo('Done with iterative minimum curvature optimization')
         self.loginfo('Lap Completed now publishing global waypoints')
 
@@ -545,17 +549,32 @@ if __name__ == "__main__":
 
     curv_opt_type = 'mincurv_iqp'  # or 'mincurv' or 'mincurv_iqp' or 'shortest_path'
 
-    map_dir = '../raceChamp/maps_new/'
+    map_dir = '/media/raphael/ab34c17f-b51d-41b8-8ee8-e324e9c5005f/home/raphael/devel/raceChamp/maps/'
 
     reverse_mapping_ = True
     rand_toggle_directions = True
 
-    map_names = []  # ['cluj', 'munich']  # ['abu_dhabi']
+    map_names = [
+        # Training
+        "new_york", "london",
+        "tokyo", "sao_paulo",
+        "abu_dhabi", "paris",
+        "los_angeles", "shanghai",
+        "sydney", "berlin",
+        "singapore", "mexico_city",
+        "rome", "cape_town",
+         "bratislava", "beijing",
+        # Testing
+        "munich", "toronto",
+        "madrid", "seoul",
+        "buenos_aires", "istanbul"
+    ]
 
     # Find all the maps in the directory
     if not map_names:
         map_names = [f for f in os.listdir(map_dir) if os.path.isdir(os.path.join(map_dir, f))]
-        print(f"Available maps: {map_names}")
+
+    print(f"Available maps: {map_names}")
 
     for i, map_name in enumerate(map_names):
         print(f"Processing map: {map_name}")
@@ -566,15 +585,15 @@ if __name__ == "__main__":
         map_path = map_dir + f'{map_name}'
 
         success = GlobalPlannerLogic(
-            safety_width_=0.27 + 2 * 0.27,
+            safety_width_=0.27 + 2 * 0.20,  # 0.27m half width of car + 2*0.15m safety margin
             map_editor_mode_=True,
             create_map_=False,
             map_name_=map_name,
             map_dir_=map_path,
             input_path_='config',
             show_plots_=False,
-            filter_kernel_size_=3,
-            required_laps_=4,
+            filter_kernel_size_=3, # not used in this case since we are not creating a map
+            required_laps_=2,  # not used in this case since we are not creating a map
             reverse_mapping_=reverse_mapping_,
         ).compute_global_trajectory(curv_opt_type=curv_opt_type, cent_length=0.0)
 

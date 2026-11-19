@@ -118,10 +118,10 @@ def trajectory_optimizer(input_path: str,
 
     # assemble track import path
     file_paths["track_file"] = os.path.join(file_paths["track_name"] + ".csv")
-    # remove the centerline name from the path up to the /
-    file_paths["track_dir"] = os.path.join("", *file_paths["track_name"].split("/")[:-1])
+    # remove the centerline name from the path (handles both relative and absolute paths)
+    file_paths["track_dir"] = os.path.dirname(os.path.normpath(file_paths["track_name"])) or "."
 
-    map_name = file_paths["track_dir"].split("/")[-1]
+    map_name = os.path.basename(os.path.abspath(file_paths["track_dir"]))
 
     # assemble friction map import paths
     file_paths["tpamap"] = os.path.join(file_paths["inputs"], "frictionmaps",
@@ -148,8 +148,10 @@ def trajectory_optimizer(input_path: str,
         os.makedirs(file_paths["track_dir"] + "/mintime", exist_ok=True)
 
     # assemble export paths
+    file_paths["map_name"] = map_name
     file_paths["traj_race_export"] = os.path.join(file_paths["track_dir"], f"{map_name}_raceline.csv")
     file_paths["traj_ltpl_export"] = os.path.join(file_paths["track_dir"], f"{map_name}_raceline_ltpl.csv")
+    file_paths["traj_direction_export"] = os.path.join(file_paths["track_dir"], f"{map_name}_driving_direction.txt")
 
     # file_paths["mintime_export"] = os.path.join(file_paths["track_dir"], "outputs", "mintime")
     #
@@ -582,6 +584,8 @@ def trajectory_optimizer(input_path: str,
                                                                 normvec_normalized=normvec_normalized_interp,
                                                                 alpha_opt=alpha_opt)
 
+    direction = helper_funcs_glob.src.export_traj_race.get_driving_direction(traj_race_cl)
+    print(f"INFO: Driving direction: {direction}")
     print("INFO: Finished export of trajectory:", time.strftime("%H:%M:%S"))
 
     # ------------------------------------------------------------------------------------------------------------------
